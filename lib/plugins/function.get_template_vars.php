@@ -1,108 +1,193 @@
 <?php
-#CMS - CMS Made Simple
-#(c)2004 by Ted Kulp (wishy@users.sf.net)
-#This projects homepage is: http://www.cmsmadesimple.org
-#
-#This program is free software; you can redistribute it and/or modify
-#it under the terms of the GNU General Public License as published by
-#the Free Software Foundation; either version 2 of the License, or
-#(at your option) any later version.
-#
-#This program is distributed in the hope that it will be useful,
-#but WITHOUT ANY WARRANTY; without even the implied warranty of
-#MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#GNU General Public License for more details.
-#You should have received a copy of the GNU General Public License
-#along with this program; if not, write to the Free Software
-#Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+declare(strict_types=1);
 
-if( !function_exists('__cms_function_output_var') ) {
-    // because of stupid php 5.3
-    function __cms_function_output_accessor($ptype,$key,$depth)
+/**
+ * CMS Made Simple - Smarty Template Variable Inspector
+ * 
+ * @package CMS
+ * @license GPL v2+
+ * @author Robert Campbell <calguy1000@hotmail.com>
+ * @version 3.0 - PHP 8.2+ Compatible
+ */
+
+if (!function_exists('__cms_function_output_var')) {
+    
+    /**
+     * Generate accessor syntax for variables
+     * 
+     * @param string $ptype Parent type (object|array)
+     * @param string|int $key Current key
+     * @param int $depth Nesting depth
+     * @return string Accessor syntax
+     * @throws LogicException
+     */
+    function __cms_function_output_accessor(string $ptype, string|int $key, int $depth): string
     {
-        // $ptype is the parent type
-        // $key is the current key we are trying to output
-        if( $depth == 0 ) return "\${$key}";
-        switch( strtolower($ptype) ) {
-        case 'object':
-            return "-&gt;{$key}";
-
-        case 'array':
-            if( is_numeric($key) ) return "[{$key}]";
-            if( strpos($key,' ') !== FALSE ) return "['{$key}']";
-            return ".{$key}";
-
-        default:
-            // should not get here....
-            throw new \LogicException('Invalid accessor type');
+        if ($depth === 0) {
+            return '$' . $key;
         }
+        
+        return match (strtolower($ptype)) {
+            'object' => '->' . $key,
+            'array' => is_numeric($key) 
+                ? "[{$key}]" 
+                : (str_contains((string)$key, ' ') ? "['{$key}']" : ".{$key}"),
+            default => throw new LogicException("Invalid accessor type: {$ptype}"),
+        };
     }
 
-    function __cms_function_output_var($key,$val,$ptype = null,$depth = 0) {
-        // this outputs something similar to json, but with type information, and indentation
-        $type = gettype($val);
-        $out = null;
-        $depth_str = '&nbsp;&nbsp;&nbsp;';
-        $acc = __cms_function_output_accessor($ptype,$key,$depth);
-        if( is_object($val) ) {
-            $o_items = get_object_vars($val);
-
-            $out .= str_repeat($depth_str,$depth);
-            $out .= "{$acc} <em>(object of type: ".get_class($val).")</em> = {";
-            if( count($o_items) ) $out .= '<br/>';
-            foreach( $o_items as $o_key => $o_val ) {
-                $out .= __cms_function_output_var($o_key,$o_val,$type,$depth+1);
-            }
-            $out .= str_repeat($depth_str,$depth)."}<br/>";
+    /**
+     * Output variable structure with type information
+     * 
+     * @param string|int $key Variable key
+     * @param mixed $val Variable value
+     * @param string|null $ptype Parent type
+     * @param int $depth Current nesting depth
+     * @param int $maxDepth Maximum allowed depth
+     * @return string HTML representation
+     */
+    function __cms_function_output_var(
+        string|int $key, 
+        mixed $val, 
+        ?string $ptype = null, 
+        int $depth = 0, 
+        int $maxDepth = 50
+    ): string {
+        // Prevent infinite recursion
+        if ($depth > $maxDepth) {
+            $indent = str_repeat('&nbsp;&nbsp;&nbsp;', $depth);
+            $safeKey = htmlspecialchars((string)$key, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            return "{$indent}{$safeKey} <em>(max depth reached)</em><br/>";
         }
-        else if( is_array($val) ) {
-            $out .= str_repeat($depth_str,$depth);
-            $out .= "{$acc} <em>($type)</em> = [<br/>";
-            foreach( $val as $a_key => $a_val ) {
-                $out .= __cms_function_output_var($a_key,$a_val,$type,$depth+1);
+        
+        $type = get_debug_type($val);
+        $indent = str_repeat('&nbsp;&nbsp;&nbsp;', $depth);
+        $acc = __cms_function_output_accessor($ptype ?? 'array', $key, $depth);
+        $output = [];
+        
+        if (is_object($val)) {
+            $className = htmlspecialchars($val::class, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $output[] = "{$indent}{$acc} <em>(object: {$className})</em> = {";
+            
+            $objVars = get_object_vars($val);
+            if ($objVars !== []) {
+                $output[] = '<br/>';
+                foreach ($objVars as $oKey => $oVal) {
+                    $output[] = __cms_function_output_var($oKey, $oVal, 'object', $depth + 1, $maxDepth);
+                }
             }
-            $out .= str_repeat($depth_str,$depth)."]<br/>";
-        }
-        else if( is_callable($val) ) {
-            $out .= str_repeat($depth_str,$depth)."{$acc} <em>($type)</em> = callable<br/>";
-        }
-        else {
-            $out .= str_repeat($depth_str,$depth);
-            if( $depth == 0 ) {
-                $out .= '$'.$key;
+            $output[] = "{$indent}}<br/>";
+            
+        } elseif (is_array($val)) {
+            $output[] = "{$indent}{$acc} <em>({$type})</em> = [<br/>";
+            
+            foreach ($val as $aKey => $aVal) {
+                $output[] = __cms_function_output_var($aKey, $aVal, 'array', $depth + 1, $maxDepth);
             }
-            else {
-                $out .= '.'.$key;
-            }
-            $out .= " <em>($type)</em> = $val<br/>";
+            $output[] = "{$indent}]<br/>";
+            
+        } elseif (is_callable($val)) {
+            $callableType = is_string($val) ? 'function' : (is_array($val) ? 'method' : 'closure');
+            $output[] = "{$indent}{$acc} <em>(callable: {$callableType})</em><br/>";
+            
+        } else {
+            $prefix = $depth === 0 ? '$' . $key : '.' . $key;
+            $escapedVal = htmlspecialchars(
+                match (true) {
+                    is_bool($val) => $val ? 'true' : 'false',
+                    is_null($val) => 'null',
+                    is_resource($val) => 'resource(' . get_resource_type($val) . ')',
+                    default => (string)$val,
+                },
+                ENT_QUOTES | ENT_HTML5,
+                'UTF-8'
+            );
+            $output[] = "{$indent}{$prefix} <em>({$type})</em> = {$escapedVal}<br/>";
         }
-        return $out;
+        
+        return implode('', $output);
     }
 }
 
-function smarty_cms_function_get_template_vars($params, $smarty)
+/**
+ * Smarty function to display all template variables
+ * 
+ * @param array{assign?: string, maxdepth?: int|string, style?: string} $params Function parameters
+ * @param object $smarty Smarty template object
+ * @return string|null HTML output or null if assigning
+ */
+function smarty_cms_function_get_template_vars(array $params, object $smarty): ?string
 {
-	$tpl_vars = $smarty->getTemplateVars();
-	$str = '<pre>';
-	foreach( $tpl_vars as $key => $value ) {
-        $str .= __cms_function_output_var($key,$value);
+    $maxDepth = isset($params['maxdepth']) 
+        ? max(1, min((int)$params['maxdepth'], 50)) 
+        : 10;
+    
+    $tplVars = $smarty->getTemplateVars();
+    
+    // Custom styling support
+    $defaultStyle = 'background:#f5f5f5;padding:1rem;border:1px solid #ddd;'
+                  . 'border-radius:4px;overflow:auto;font-family:monospace;'
+                  . 'font-size:0.875rem;line-height:1.5;max-height:600px;';
+    $style = $params['style'] ?? $defaultStyle;
+    $safeStyle = htmlspecialchars($style, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    
+    // Build output using array for better performance
+    $output = ["<pre style=\"{$safeStyle}\">"];
+    
+    if ($tplVars === []) {
+        $output[] = '<em>No template variables found.</em>';
+    } else {
+        foreach ($tplVars as $key => $value) {
+            $output[] = __cms_function_output_var($key, $value, null, 0, $maxDepth);
+        }
     }
-    $str .= '</pre>';
-	if( isset($params['assign']) ){
-	    $smarty->assign(trim($params['assign']),$str);
-	    return;
+    
+    $output[] = '</pre>';
+    $result = implode('', $output);
+    
+    // Assign to variable if requested
+    if (isset($params['assign']) && $params['assign'] !== '') {
+        $smarty->assign(trim($params['assign']), $result);
+        return null;
     }
-	return $str;
+    
+    return $result;
 }
 
-function smarty_cms_about_function_get_template_vars() {
-	?>
-	<p>Author: Robert Campbell&lt;calguy1000@hotmail.com&gt;</p>
-	<p>Version: 1.0</p>
-	<p>
-	Change History:<br/>
-	None
-	</p>
-	<?php
+/**
+ * Display plugin information
+ * 
+ * @return void
+ */
+function smarty_cms_about_function_get_template_vars(): void
+{
+    ?>
+        <p><strong>Authors:</strong><p>
+		<ul>
+			<li>Robert CAMPBELL &lt;calguy1000@hotmail.com&gt;</li>
+			<li>Jocelyn LUSSEAU • Koalink &lt;koalink.fr&gt;</li>
+		</ul>
+        <p><strong>Version:</strong> 3.0</p>
+        
+        <h4>Usage:</h4>
+        <pre style="background: #f5f5f5; padding: 0.5rem; border-radius: 4px;">{get_template_vars}
+{get_template_vars assign="debug_info"}
+{get_template_vars maxdepth=5}
+{get_template_vars style="background:#fff;padding:10px;"}</pre>
+        
+        <h4>Parameters:</h4>
+        <ul style="line-height: 1.6;">
+            <li><code>assign</code> - (optional) Variable name to assign result to</li>
+            <li><code>maxdepth</code> - (optional) Maximum recursion depth (1-50, default: 50)</li>
+            <li><code>style</code> - (optional) Custom CSS style for the output container</li>
+        </ul>
+        
+        <h4>Change History:</h4>
+        <ul style="line-height: 1.6;">
+            <li><strong>v3.0</strong> - PHP 8.2+ compatibility, strict types, match expressions, named arguments</li>
+            <li><strong>v2.0</strong> - Security fixes (XSS prevention), performance improvements</li>
+            <li><strong>v1.0</strong> - Initial release</li>
+        </ul>
+    <?php
 }
 ?>
