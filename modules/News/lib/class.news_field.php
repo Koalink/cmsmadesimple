@@ -141,7 +141,7 @@ final class news_field
   {
     $db = cmsms()->GetDb();
     $query = 'UPDATE '.CMS_DB_PREFIX.'module_news_fielddefs SET name = ?, type = ?, max_length = ?, modified_date = NOW(),
-              item_orderr = ?, public = ?, extra = ? WHERE id = ?';
+              item_order = ?, public = ?, extra = ? WHERE id = ?';
     $dbr = $db->Execute($query,array($this->name,$this->type,$this->max_length,$this->item_order,$this->public,
 				     serialize($this->extra),$this->id));
     $this->modified_date = $db->DbTimeStamp(time());
