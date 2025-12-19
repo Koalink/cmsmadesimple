@@ -81,7 +81,7 @@ _owd=`pwd`
 _workdir=/tmp/$_this.$$
 _destdir=/tmp
 _langs=''
-_coremodules='AdminSearch CMSContentManager CmsJobManager CMSMailer DesignManager FileManager FilePicker MenuManager MicroTiny ModuleManager Navigator News Search'
+_coremodules='AdminSearch CMSContentManager CmsJobManager CMSMailer DesignManager FileManager FilePicker MicroTiny ModuleManager Navigator News Search'
 
 # Process command line arguments
 while [ $# -gt 1 ]; do
