@@ -123,7 +123,7 @@ class Smarty_CMS extends CMSSmartyBase
             if( \cms_siteprefs::get('use_smartycache',0) ) $this->setCompileCheck(\cms_siteprefs::get('use_smartycompilecheck',1));
 
             // Enable security object
-            if( !$config['permissive_smarty'] ) $this->enableSecurity('CMSSmartySecurityPolicy');
+              $this->enableSecurity('CMSSmartySecurityPolicy');
         }
         else if($_gCms->test_state(CmsApp::STATE_ADMIN_PAGE)) {
             $this->setCaching(false);
@@ -258,7 +258,7 @@ class Smarty_CMS extends CMSSmartyBase
 
         if( CmsApp::get_instance()->is_frontend_request() ) {
             $row = cms_module_smarty_plugin_manager::load_plugin($name,$type);
-            if( is_array($row) && is_array($row['callback']) && count($row['callback']) == 2 &&
+            if( is_array($row) && is_array($row['callback']) && 2 === count($row['callback']) &&
                 is_string($row['callback'][0]) && is_string($row['callback'][1]) ) {
                 $cachable = $row['cachable'];
                 $callback = $row['callback'][0].'::'.$row['callback'][1];
@@ -290,7 +290,7 @@ class Smarty_CMS extends CMSSmartyBase
      */
     public function set_global_cacheid($id)
     {
-        if( is_null($id) || $id === '' ) {
+        if(NULL === $id || '' === $id) {
             $this->_global_cache_id = null;
         }
         else {
@@ -337,6 +337,44 @@ class Smarty_CMS extends CMSSmartyBase
     }
   
   /**
+   * Validate a CMSMS template identifier.
+   *
+   * Template identifiers must be symbolic and must not reference
+   * Smarty resources or filesystem paths.
+   *
+   * Should fix the URI attack vector: SSTI → LFI → potential RCE attack chain
+   */
+  protected function _is_valid_template_identifier($tpl)
+  {
+    if( !is_string($tpl) || '' === $tpl)
+    {
+      return false;
+    }
+    
+    // Disallow Smarty resource prefixes (file:, string:, etc.)
+    if(false !== strpos($tpl, ':'))
+    {
+      if(cmsms()->is_frontend_request())
+      
+      {
+        return false;
+      }
+    }
+    
+    // Disallow filesystem semantics
+    if(
+      false !== strpos($tpl, '..') ||
+      false !== strpos($tpl, '/') ||
+      false !== strpos($tpl, '\\')
+    )
+    {
+      return false;
+    }
+    
+    return true;
+  }
+  
+  /**
    * fetch method
    * NOTE: Overwrites parent
    *
@@ -349,15 +387,18 @@ class Smarty_CMS extends CMSSmartyBase
    *
    * @return mixed
    * @throws \SmartyException
-   * @deprecated
    */
     public function fetch($template = null,$cache_id = null, $compile_id = null, $parent = null, $display = false, $merge_tpl_vars = true, $no_output_filter = false)
     {
+      
+      if( !$this->_is_valid_template_identifier($template) )
+      {
+        debug_buffer('', 'Blocked invalid template identifier');
+        return '';
+      }
         $name = $template; if( startswith($name,'string:') ) $name = 'string:';
         debug_buffer('','Fetch '.$name.' start');
-      //$this->unregister_modifier('date_format');
-      //$this->registerPlugin('modifier', 'date_format', [$this, '_modifier_date_format']);
-
+        
         // we called the root smarty fetch method instead of some template object's fetch method directly.
         // which is the case for things like Module::ProcessTemplate and Module::ProcessTemplateFromDatabase etc..()
         if( is_object($template) ) {
