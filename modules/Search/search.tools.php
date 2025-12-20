@@ -41,6 +41,15 @@ function search_StemPhrase(&$module,$phrase)
 
     // split into words
     $words = preg_split('/[\s,!.;:\?()+\-\/\\\\]+/u', $phrase);
+    // find slashed words & add to $words (e.g. path/to/something, 9/11, 2/apples)
+    preg_match_all('/[^\/\s]+(?:\/[^\/\s]+)+/u', $phrase, $matches);
+    $slashed_words = $matches[0];
+    if( is_array($slashed_words) && count($slashed_words) ) {
+        foreach( $slashed_words as $one ) {
+            $words[] = $one;
+        }
+    }
+
     if( !is_array($words) ) return [];
 
     // ignore 1-digit numbers and non-numbers < 3 bytes
@@ -96,7 +105,7 @@ function search_AddWords(&$obj, $module = 'Search', $id = -1, $attr = '', $conte
         if( !is_array($tmp) || !count($tmp) ) return;
         $words = array();
         foreach( $tmp as $key => $val ) {
-            $words[] = array('word'=>$key,'count'=>$val);
+            $words[] = array('word'=>(string)$key,'count'=>$val);
         }
         $q = "SELECT id FROM ".CMS_DB_PREFIX.'module_search_items WHERE module_name=?';
         $parms = array($module);
@@ -220,6 +229,8 @@ function search_DoEvent(&$module, $originator, $eventname, &$params )
             // here check for a string to see
             // if module content is indexable at all
             $non_indexable = (strpos($text, NON_INDEXABLE_CONTENT) !== FALSE)?1:FALSE;
+            // Convert HTML line breaks to spaces - bug fix
+            $text = preg_replace('/<br\s*\/?>/i', ' ', $text); 
             $text = trim(strip_tags($text));
             if( $text && !$non_indexable ) $module->AddWords($module->GetName(), $content->Id(), 'content', $text);
         }
