@@ -21,7 +21,7 @@ function ensure_tmp_dirs_exist() : bool
     }
     
     // Set permissions
-    if(!chmod($dir, 0777))
+    if(!@chmod($dir, 0777) && !is_writable($dir))
     {
       echo "Failed to set permissions on directory: $dir\n";
     }
